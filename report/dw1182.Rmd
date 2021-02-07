@@ -1,0 +1,334 @@
+---
+title: "Analysis of the Relationship Between Essential and Non-Essential Schizosaccharomyces pombe Genes Reveals a Correlation Between mRNA Function and localisation on mRNA Stability"
+author: "dw1182"
+date: "30/01/2021"
+output:
+  bookdown::html_document2: default
+bibliography: refs/references.bib
+nocite: '@*'
+link-citations: true
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+                      warning = FALSE,
+                      message = FALSE,
+                      fig.retina = 3)
+```
+
+```{r packages}
+library(presetplots)
+library(hrbrthemes)
+library(tidyverse)
+library(patchwork)
+library(ggplot2)
+library(viridis)
+library(ggpubr)
+library(dplyr)
+library(Rmisc)
+library(car)
+```
+
+```{r import}
+load(url("https://www-users.york.ac.uk/~dj757/BIO00047I/data/yeast_data.28-02-2020.Rda"))
+
+angeli <- read.delim("data-raw/AnGeLiDatabase.txt",h=T)
+
+cols <- c("Group","Protein Localisations (ORFeome)")
+
+angeli2 <- angeli %>%
+  select(grep("FYPO|PF|GO.",colnames(angeli),invert=T)) %>%
+  t() %>%
+  data.frame() %>%
+  filter(X3 %in% cols ) %>%
+  t() %>%
+  data.frame()
+
+angeli2 <- angeli2[8:7012,]
+
+names(angeli2)[1] = "gene"
+
+gene <- gene[,c(1, 4, 7, 8, 9, 11, 22, 25)]
+
+gene_f <- merge(gene,angeli2, by = "gene", all = T)
+
+save(gene_f, file = "data-processed/gene_f.Rda")
+```
+
+```{r analysis subsets}
+prot <- gene_f %>%
+  subset(protein_coding ==1) %>%
+  subset(!is.na(essential)) %>%
+  subset(!is.na(gene.expression.RPKM))
+
+ess <- subset(prot, essential==1)
+non.ess <- subset(prot, essential==0)
+
+prot2 <- gene_f %>%
+  subset(protein_coding ==1) %>%
+  subset(!is.na(essential)) %>%
+  subset(!is.na(mRNA.stabilities))
+
+nams<- names(gene_f[,1:8])
+
+locale <- gene_f %>%
+  subset(!is.na(mRNA.stabilities)) %>% 
+  subset(!is.na(essential)) %>% 
+  pivot_longer(names_to = "localisation",
+               values_to = "present",
+               cols = -nams  ) %>% 
+  subset(present == 1)
+```
+
+```{r summary statistics}
+wilcox_gene <- wilcox.test(ess$gene.expression.RPKM, non.ess$gene.expression.RPKM)
+
+w_gene <- signif(wilcox_gene[["statistic"]][["W"]], digits = 4)
+p_gene <- signif(wilcox_gene[["p.value"]], digits = 4)
+
+wilcox_strp <- wilcox.test(prot$mRNA.stabilities, prot$gene.expression.RPKM)
+
+w_strp <- signif(wilcox_strp[["statistic"]][["W"]], digits = 4)
+p_strp <- signif(wilcox_strp[["p.value"]], digits = 4)
+
+wilcox_mrst <- wilcox.test(ess$mRNA.stabilities, non.ess$mRNA.stabilities)
+
+w_mrst <- signif(wilcox_mrst[["statistic"]][["W"]], digits = 4)
+p_mrst <- signif(wilcox_mrst[["p.value"]], digits = 4)
+
+summary <- summarySE(locale, measurevar = "mRNA.stabilities", groupvars = c("localisation", "essential"))
+
+mod <- aov(data = locale, mRNA.stabilities ~ localisation * essential)
+mod_sum <- summary(mod)
+
+df <- mod_sum[[1]][["Df"]]
+df_l <- signif(df[1], digits = 4)
+df_e <- signif(df[2], digits = 4)
+df_int <- signif(df[3], digits = 4)
+
+fv <- mod_sum[[1]][["F value"]]
+fv_l <- signif(fv[1], digits = 4)
+fv_e <- signif(fv[2], digits = 4)
+fv_int <- signif(fv[3], digits = 4)
+
+pv <- mod_sum[[1]][["Pr(>F)"]]
+pv_l <- signif(pv[1], digits = 4)
+pv_e <- signif(pv[2], digits = 4)
+pv_int <- signif(pv[3], digits = 4)
+```
+
+
+<br>
+
+# Abstract
+
+mRNA stability has been shown to influence gene expression and is regulated by post-transcriptional mechanisms. Improper post-transcriptional regulation has been shown to contribute to several diseases including cancer, inflammatory disease, and Alzheimer’s. Understanding the influences of mRNA stability could lead to the development of new therapies. In this report, I test: whether essentiality affects gene expression; the relationship between mRNA stability and expression to essentiality of mRNAs, as well as the relationship between mRNA stability and localisation. It was found that essential genes were expressed more highly than non-essential genes in general (Figure \@ref(fig:boxplot)) ($w$ = `r w_gene`, $p$ = `r p_gene`); essential mRNAs were significantly more stable than non-essential mRNAs overall ($w$ = `r w_mrst`, $p$ = `r p_mrst`); more stable mRNAs tend to be more highly expressed ($w$ = `r w_strp`, $p$ = `r p_strp`); mRNA stability differs significantly based on the localisation of the proteins they encode (ANOVA: $f$ = `r fv_l`; $d.f.$ = `r df_l`; $p$ = `r pv_l`) and that differences in stability between essential and non-essential mRNAs were dependent on their localisation (ANOVA: $f$ = `r fv_int`; $d.f.$ = `r df_int`; $p$ = `r pv_int`). It is suggested that differences in post-transcriptional regulation are a contributor to the pattern of expression observed, and that essentiality is not the factor affecting mRNA stability, but it is instead based on the function of the proteins they encode.
+
+
+<br>
+
+
+# Introduction
+
+<br>
+
+It is generally agreed that post-transcriptional regulation of gene expression is essential for the proper functioning of cells. It has been shown that malfunctioning post-transcriptional regulation can be responsible for various diseases including cancer, inflammatory disease, and Alzheimer’s. The fate of mRNA is influenced in a many ways. RNA capping and addition of a poly(A) tail increase the stability of mRNAs resulting in increased expression. The RNA interference (RNAi) pathway is another mechanism of regulation, which silences and/or degrades mRNAs that it interacts with [@cheneval_2010]. RNAi is thought to modulate the expression ~30% of all mammalian protein-coding genes [@filipowicz_2008] and ~60% of human protein-coding genes [@friedman_2009]. The stability of mRNAs appears to be incredibly influential on the overall expression of a gene with just small changes in stability resulting in large changes in steady-state levels [@cheneval_2010]. The stability of mRNAs is regulated by a subset of RNA binding proteins (RBPs) with functions ranging from control of polyadenylation to dampening of miRNA mediated decay, part of the RNAi pathway [@diaz_2018].
+<br>
+
+This study aims to assess whether essential and non-essential protein-coding mRNAs interact with the post transcription machinery differently and whether this pattern persists when these mRNAs are categorised based on the localisation of the proteins they encode to determine whether essentiality affects post-transcriptional regulation.
+
+
+<br>
+
+
+# Results and Discussion
+<br>
+
+## Are Essential Genes Expressed Differently to Non-Essential Genes?
+<br>
+It was hypothesised that Essential protein-coding genes would be more highly expressed than non-essential genes. This is due to their role in core cellular processes and as a result, necessitate more frequent expression as well as at a greater level. I tested this by comparing the expression of 1369 essential *Schizosaccharomyces pombe* genes and 3771 non-essential genes using a Wilcoxon signed-rank test. The expression data were taken from [@atkinson_2018] and the essentiality data from [@kim_2010], [@pom]. provided the protein-coding gene data. Data analysis revealed that essential genes were more highly expressed than non-essential genes (Figure \@ref(fig:boxplot)) ($w$ = `r w_gene`, $p$ = `r p_gene`). Similar studies have found that essential genes in Escherichia coli and Bacillus subtilis are also expressed more highly than non-essential genes [@rocha_2004]. The results seen in these data may be due to increased stability of essential gene mRNAs, as a consequence of differing post-transcriptional regulation, resulting in increased steady-state levels of expression.
+ 
+ 
+<br> 
+  
+  
+(ref:boxplot) **Essential genes are more highly expressed than non-essential genes on average.** A comparison between the expression of 1369 essential *Schizosaccharomyces pombe* genes and  3771 non-essential genes was made using a Wilcoxon signed-rank test. Data analysis revealed that essential genes were more highly expressed than non-essential genes ($w$ = `r w_gene`, $p$ = `r p_gene`).
+
+```{r boxplot, fig.height=7, fig.width=12, fig.cap="(ref:boxplot)"}
+plot_choice <- c("box", "jit", "vio")
+
+plots(plot_choice,
+      prot, 
+      prot$essential, 
+      log10(prot$gene.expression.RPKM), 
+      prot$essential,
+      c("non-Essential","Esssential"),
+      "Essentiality",
+      "Gene Expression log10(RPKM)",
+      title = "")
+```
+
+
+<br>
+
+
+## The relationship between mRNA Stability and RPKM in Essential and Non-Essential mRNAs
+
+<br>
+
+It was hypothesised that higher mRNA stability is correlated with higher expression, as the mechanisms of post-transcriptional regulation would suggest. I used a Wilcoxon signed-rank test to determine the relationship between the stability of mRNAs and their level of expression (RPKM). mRNA stability data were taken from [@hasan_2014]. It was found that overall more stable mRNAs were expressed more highly (Figure \@ref(fig:scatter)) ($w$ = `r w_strp`, $p$ = `r p_strp`). This confirmed that the difference in mRNA stability observed in section 1 could have been the result of varying mRNA stabilities suggesting that essential mRNAs are more stable. Increased RNA stability is generally considered to increase expression levels [@cheneval_2010]; [@filipowicz_2008]; [@friedman_2009]; [@abreu_2009]; [@diaz_2018].
+
+<br>
+
+After the influence of stability on expression had been verified I used a Wilcoxon signed-rank test to analyse the difference between the stability of essential and non-essential mRNAs. It was hypothesised that essential mRNAs would have greater stability due to their increased expression. The results showed that essential mRNAs were more stable than non-essential mRNAs on average (Figure \@ref(fig:boxplots2)) ($w$ = `r w_mrst`, $p$ = `r p_mrst`).
+ These results suggested that the differences in expression observed in section 1 are due in part to differences in post-transcriptional regulation. Post-transcriptional regulation is known to involve modulation of mRNA stability [@cheneval_2010]; [@filipowicz_2008]; [@friedman_2009]; [@abreu_2009]; [@diaz_2018]. It is unclear to what extent post-transcriptional regulation is affecting the differences in expression or if differences in expression are correlated with essentiality directly. There is evidence to suggest that mRNAs involved in a particular process can be co-regulated in groups called regulons [@hasan_2014].
+
+  
+<br>
+
+
+(ref:scatter) **mRNA stability increases with expression.** A Wilcoxon signed rank test was used to determine the relationship between the stability of mRNAs and their level of expression (RPKM). It was found that overall more stable mRNAs were expressed more highly ($w$ = `r w_strp`, $p$ = `r p_strp`)
+
+```{r scatter, fig.height=8, fig.width=12, fig.cap="(ref:scatter)"}
+plot_sctr(prot,
+          log10(prot$mRNA.stabilities),
+          log10(prot$gene.expression.RPKM),
+          "log10(mRNA.stabilities)",
+          "Gene Expression log10(RPKM)",
+          title = "")
+```
+
+  
+<br> 
+  
+
+(ref:boxplots2) **Essential mRNAs are more stable than non-essential mRNAs on average.** *The box indicates the 1st and 3rd quartiles, and the dark line indicates the median.*. A Wilcoxon signed rank test was used to analyse the difference between the stability of essential and non-essential mRNAs. The results showed that essential mRNAs were more stable than non-essential mRNAs on average ($w$ = `r w_mrst`, $p$ = `r p_mrst`)
+
+```{r boxplots2, fig.height=7, fig.width=12, fig.cap="(ref:boxplots2)"}
+
+plots(plot_choice,
+      prot2,
+      prot2$essential,
+      log10(prot2$mRNA.stabilities),
+      prot2$essential,
+      c("non-Essential","Esssential"),
+      "Essentiality",
+      "mRNA.stabilities",
+      title = "" )
+```
+
+
+<br>
+
+
+## The Relationship Between mRNA Stability and Localisation in Essential and Non-Essential mRNAs
+
+<br>
+
+Based on the results of section 2, a difference between the stability of mRNAs encoding proteins of different functions was hypothesised, as essential and non-essential genes generally carry out different functions and are regulated differently as a result. Due to this, it was predicted that there would be differences in the stabilities of mRNAs with respect to their localisations, due to different compartments carrying out different processes. It was also hypothesised that in different protein localisations you would see differences in the relationship between mRNA stability and essentiality if we assume that essentiality does not influence mRNA stability separately from the effect of differing functions.
+
+<br>
+
+A two-way ANOVA compared the relationship between localisation and essentiality on the stability of their respective mRNAs. Localisation data was taken from [@matsuyama_2006]. Results (Figure \@ref(fig:barplot))
+showed a significant main effect of localisation on mRNA stability 
+(ANOVA: $f$ = `r fv_l`; $d.f.$ = `r df_l`; $p$ = `r pv_l`),
+significant main effect between essential and non-essential mRNAs 
+(ANOVA: $f$ = `r fv_e`; $d.f.$ = `r df_e`; $p$ = `r pv_e`). An interaction was observed (ANOVA: $f$ = `r fv_int`; $d.f.$ = `r df_int`; $p$ = `r pv_int`), which explains the difference in the effect of essentiality compared to section 2, suggesting that differences seen in previous sections were due to differing proportions of mRNAs of different functions, created by grouping by essentiality. The data may not be reliable as none of the assumptions for ANOVA were met. Function influencing post-transcriptional regulation is supported by the existence of regulons, which co-regulate mRNAs post-transcriptionally. Regulons each have unique binding motifs for RBPs [@hasan_2014]. The existence of regulons may not fully explain the differences observed, as it was found that only 16% of mRNAs were affected by RBP deletion mutants, suggesting that other factors affected RNA stability. Incorporation of other potential influences of mRNA stability is required to find out more.
+
+  
+<br> 
+  
+
+(ref:barplot) **mRNA stability varies based on localisation and the difference between the stability of essential and non-Essential mRNAs is dependent on their localisation.** *Bars indicate mean mRNA stability with error bars $\bar{x} \pm s.e.m.$). Purple and yellow bars represent non essential and essential genes respectively.* A two-way ANOVA was used to compare the effect and relationship between localisation and essentiality on the stability of their respective mRNAs. Results showed a significant main effect of localisation on mRNA stability (ANOVA: $f$ = `r fv_l`; $d.f.$ = `r df_l`; $p$ = `r pv_l`), and significant main effect between essential and non-essential mRNAs (ANOVA: $f$ = `r fv_e`; $d.f.$ = `r df_e`; $p$ = `r pv_e`). An interaction was observed (ANOVA: $f$ = `r fv_int`; $d.f.$ = `r df_int`; $p$ = `r pv_int`).
+
+```{r barplot, fig.height=12, fig.width=35,  fig.cap="(ref:barplot)"}
+#####
+nams2<- names(gene_f[,9:47])
+nams2[1]="Amb"
+nams2[2]="cdc"
+nams2[3]="cdcts"
+nams2[4]="cdp"
+nams2[5]="cds"
+nams2[6]="cdot"
+nams2[7]="cmt"
+nams2[8]="cGTn"
+nams2[9]="cyt"
+nams2[10]="cyQQn"
+nams2[11]="ER"
+nams2[12]="Fil"
+nams2[13]="gol"
+nams2[14]="mitu"
+nams2[15]="mito"
+nams2[16]="n.a.s"
+nams2[17]="n.d"
+nams2[18]="ndot"
+nams2[19]="nen"
+nams2[20]="no
+GT
+c"
+nams2[21]="no
+GT
+GT
+n"
+nams2[22]="no
+GT
+n
+GT
+c"
+nams2[23]="no
+GT
+n
+GT
+GT
+c"
+nams2[24]="n
+GT
+n"
+nams2[25]="no
+GT
+n
+QQ
+c"
+nams2[26]="nol"
+nams2[27]="n
+GT
+c"
+nams2[28]="n
+GTQQ
+c"
+nams2[29]="nuc"
+nams2[30]="o.n.d"
+nams2[31]="pcts"
+nams2[32]="pct"
+nams2[33]="ps"
+nams2[34]="per"
+nams2[35]="sep"
+nams2[36]="SPB"
+nams2[37]="spmi"
+nams2[38]="vac"
+nams2[39]="vac.m"
+#####
+plot_bar(summary,
+         summary$localisation,
+         summary$mRNA.stabilities,
+         summary$essential,
+         nams2,
+         "Localisation",
+         "mRNA Stability",
+         title = "")
+```
+
+
+<br> 
+
+
+# Conclusions
+
+<br>
+
+The results showed that essential genes were expressed more highly than non-essential genes overall. Further testing revealed that essential mRNAs were significantly more stable overall, suggesting that differences in post-transcriptional regulation may be contributing to the pattern of expression. It was also found that mRNA stability differs significantly based on their localisation and that differences in stability between essential and non-essential mRNAs were dependent on their localisation. It was inferred that essentiality may not affect mRNA stability and that the differences due to the function of the proteins they encode instead. My explanation for these differences was that mRNAs coding for proteins involved in different processes are regulated differently based on the process/processes they are involved in. This idea is supported by the findings of [@hasan_2014] who found that mRNAs coding for proteins involved in different processes were organised into regulons with unique binding motifs for RBPs. The data from section 3 may not be representative, as the assumptions of ANOVA were not met. It was also suggested that not all mRNAs are organised into regulons and that there are likely other factors affecting mRNA stability [@hasan_2014], 
+for example, there is evidence that increased concentrations of mRNA can increase mRNA stability [@nouaille_2017].Comparing the relationship between mRNA function and mRNA stability directly and comparing the impact of various factors on these values could shed more light on the relationship between post-transcriptional regulation mRNA function.
+
+# References
